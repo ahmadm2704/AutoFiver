@@ -12,7 +12,6 @@ const filterEl = document.getElementById("filter");
 const progressContainer = document.getElementById("progressContainer");
 const progressBar = document.getElementById("progressBar");
 const progressText = document.getElementById("progressText");
-
 // Modal elements
 const loginModal = document.getElementById("loginModal");
 const successModal = document.getElementById("successModal");
@@ -176,7 +175,6 @@ function updateSupabaseStatus(connectionStatus) {
     }
   }
 }
-
 function render(items) {
   if (items.length === 0) {
     listEl.innerHTML = `
@@ -520,7 +518,6 @@ async function scrapeAllGigDetails(gigList) {
   
   return detailed;
 }
-
 async function waitUntilLoggedIn(tabId, maxMs = 120000) {
   const start = Date.now();
   while (Date.now() - start < maxMs) {
@@ -706,7 +703,6 @@ testSupabaseBtn.addEventListener('click', testSupabaseConnection);
 
 // Load config on popup open
 loadSupabaseConfig();
-
 // Modal event listeners
 openLoginBtn.addEventListener("click", openFiverrLogin);
 
@@ -747,7 +743,6 @@ document.addEventListener("keydown", (e) => {
     }
   }
 });
-
 // send a message to a tab but ensure gig_scraper is injected when needed
 async function sendToTabForScraper(tabId, payload) {
   const sendOnce = () => new Promise((res, rej) => {

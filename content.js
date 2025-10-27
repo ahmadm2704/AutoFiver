@@ -9,7 +9,6 @@ if (typeof window.AppState === 'undefined') {
   };
   (document.head || document.documentElement).appendChild(script);
 }
-
 // ---------- utils ----------
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 function clean(s){ return (s||"").replace(/\s+/g," ").trim(); }
@@ -396,7 +395,6 @@ function collectGigDataOnce(){
       console.log(`[Fiverr Reader] Skipping row ${index + 1}: looks like UI element:`, title);
       return;
     }
-    
     // Deduplicate based on title
     const key=title.toLowerCase(); 
     if (seen.has(key)) {
@@ -587,7 +585,6 @@ async function syncGigsToSupabase(gigs) {
     return { success: false, error: error.message };
   }
 }
-
 // ---------- message handlers ----------
 chrome.runtime.onMessage.addListener((msg,_sender,sendResponse)=>{
   if (msg.type==="ENSURE_LOGIN"){
