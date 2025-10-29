@@ -1,5 +1,5 @@
-// state.js - FIXED VERSION
-// Properly formats gig data for Supabase storage
+// state.js - SIMPLIFIED FOR NEW SCHEMA
+// Direct table insertion instead of RPC
 
 (function(){
   const STORAGE_KEY = 'supabase_config';
@@ -30,102 +30,6 @@
     return new Promise((res)=> chrome.storage.local.set({[STORAGE_KEY]: cfg}, ()=> res()));
   }
 
-  // Properly flatten nested gig data for database storage
-  function flattenGigData(gig) {
-    try {
-      const flattened = {
-        url: gig.url || '',
-        title: gig.title || '',
-        edit_url: gig.editUrl || gig.edit_url || '',
-        scraped_at: gig.scraped_at || new Date().toISOString(),
-        user_id: 'extension_user',
-        
-        // Overview data
-        overview_title: gig.overview?.title || gig.title || '',
-        overview_description: gig.overview?.description || gig.description || '',
-        seller_name: gig.seller?.name || '',
-        seller_rating: gig.seller?.rating || '',
-        seller_level: gig.seller?.level || '',
-        delivery_time: gig.delivery_time || '',
-        
-        // Tags as properly formatted JSON array
-        tags: JSON.stringify(
-          Array.isArray(gig.overview?.tags) ? gig.overview.tags : 
-          Array.isArray(gig.tags) ? gig.tags : 
-          []
-        ),
-        
-        // Images as properly formatted JSON array
-        images: JSON.stringify(
-          Array.isArray(gig.overview?.images) ? gig.overview.images :
-          Array.isArray(gig.gallery?.images) ? gig.gallery.images :
-          Array.isArray(gig.images) ? gig.images :
-          []
-        ),
-        
-        // Pricing packages as properly formatted JSON array
-        packages: JSON.stringify(
-          Array.isArray(gig.pricing?.packages) ? 
-            gig.pricing.packages.map(p => ({
-              name: p.name || '',
-              price: p.price || '',
-              desc: p.desc || ''
-            })) :
-          Array.isArray(gig.packages) ? gig.packages :
-          []
-        ),
-        
-        // Description content
-        description_content: 
-          gig.description?.content || 
-          gig.description?.description ||
-          gig.overview?.description ||
-          gig.description ||
-          '',
-        
-        // FAQ as properly formatted JSON array
-        faq: JSON.stringify(
-          Array.isArray(gig.description?.faq) ?
-            gig.description.faq.map(item => ({
-              question: item.question || '',
-              answer: item.answer || ''
-            })) :
-          []
-        ),
-        
-        // Requirements as properly formatted JSON array
-        requirements: JSON.stringify(
-          Array.isArray(gig.requirements?.list) ? gig.requirements.list :
-          Array.isArray(gig.requirements?.requirements) ? gig.requirements.requirements :
-          []
-        ),
-        
-        // What to provide and get as JSON arrays
-        what_to_provide: JSON.stringify(
-          Array.isArray(gig.requirements?.what_to_provide) ? gig.requirements.what_to_provide : []
-        ),
-        
-        what_you_get: JSON.stringify(
-          Array.isArray(gig.requirements?.what_you_get) ? gig.requirements.what_you_get : []
-        ),
-        
-        // Gallery videos
-        gallery_videos: JSON.stringify(
-          Array.isArray(gig.gallery?.videos) ? gig.gallery.videos : []
-        ),
-        
-        // Error field
-        error: gig.error || null
-      };
-      
-      console.log('[AppState] Flattened gig data:', flattened);
-      return flattened;
-    } catch (e) {
-      console.error('[AppState] Error flattening gig data:', e, gig);
-      return null;
-    }
-  }
-
   async function initializeSupabase() {
     try {
       const config = await getSupabaseConfig();
@@ -135,40 +39,7 @@
         return null;
       }
 
-      if (typeof window !== 'undefined' && window.supabase) {
-        supabaseClient = window.supabase.createClient(config.url, config.key);
-      } else {
-        supabaseClient = {
-          url: config.url,
-          key: config.key,
-          from: (table) => ({
-            select: (columns = '*') => ({
-              async execute() {
-                return await fetchSupabaseData('GET', table, null, columns);
-              }
-            }),
-            insert: (data) => ({
-              async execute() {
-                return await fetchSupabaseData('POST', table, data);
-              }
-            }),
-            update: (data) => ({
-              eq: (column, value) => ({
-                async execute() {
-                  return await fetchSupabaseData('PATCH', table, data, null, { [column]: value });
-                }
-              })
-            }),
-            delete: () => ({
-              eq: (column, value) => ({
-                async execute() {
-                  return await fetchSupabaseData('DELETE', table, null, null, { [column]: value });
-                }
-              })
-            })
-          })
-        };
-      }
+      supabaseClient = { url: config.url, key: config.key };
 
       await testSupabaseConnection();
       return supabaseClient;
@@ -187,7 +58,17 @@
 
       console.log('[AppState] Testing Supabase connection...');
       
-      const response = await fetchSupabaseData('GET', 'gigs', null, 'count');
+      const response = await fetch(
+        `${supabaseClient.url}/rest/v1/gigs?select=count`,
+        {
+          headers: {
+            'apikey': supabaseClient.key,
+            'Authorization': `Bearer ${supabaseClient.key}`,
+          }
+        }
+      );
+      
+      if (!response.ok) throw new Error('Connection failed');
       
       console.log('[AppState] Supabase connection test successful');
       
@@ -209,22 +90,14 @@
     }
   }
 
-  async function fetchSupabaseData(method, table, data = null, columns = '*', filters = {}) {
+  async function fetchSupabaseData(method, table, data = null) {
     const config = await getSupabaseConfig();
     
     if (!config.url || !config.key) {
       throw new Error('Supabase configuration missing');
     }
 
-    const url = new URL(`${config.url}/rest/v1/${table}`);
-    
-    if (method === 'GET' && columns !== '*') {
-      url.searchParams.set('select', columns);
-    }
-
-    Object.entries(filters).forEach(([key, value]) => {
-      url.searchParams.set(key, `eq.${value}`);
-    });
+    const url = `${config.url}/rest/v1/${table}`;
 
     const options = {
       method,
@@ -240,11 +113,11 @@
       options.body = JSON.stringify(data);
     }
 
-    const response = await fetch(url.toString(), options);
+    const response = await fetch(url, options);
     
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Supabase API error: ${response.status} - ${errorText}`);
+      throw new Error(`Supabase error: ${response.status} - ${errorText}`);
     }
 
     if (method === 'GET') {
@@ -274,39 +147,180 @@
         try {
           console.log(`[AppState] Processing gig: ${gig.title || gig.url}`);
           
-          // Flatten the gig data properly
-          const gigData = flattenGigData(gig);
+          // Extract price from string like "$ 80" -> 80
+          const extractPrice = (priceStr) => {
+            if (!priceStr) return null;
+            const match = priceStr.match(/\d+/);
+            return match ? parseFloat(match[0]) : null;
+          };
+
+          // 1. Insert/Update main gig - First delete old packages to avoid duplicates
+          const gigData = {
+            user_id: 'extension_user',
+            url: gig.url || '',
+            title: gig.title || '',
+            edit_url: gig.editUrl || gig.edit_url || '',
+            scraped_at: gig.scraped_at || new Date().toISOString(),
+            overview_title: gig.overview?.title || gig.title || '',
+            overview_description: gig.overview?.description || gig.description || '',
+            description_content: gig.description?.content || gig.description || '',
+            seller_name: gig.seller?.name || '',
+            seller_rating: gig.seller?.rating || '',
+            seller_level: gig.seller?.level || '',
+            tags: JSON.stringify(Array.isArray(gig.overview?.tags) ? gig.overview.tags : gig.tags || []),
+            images: JSON.stringify(Array.isArray(gig.overview?.images) ? gig.overview.images : gig.gallery?.images || []),
+            currency: 'USD'
+          };
+
+          console.log('[AppState] Upserting gig:', gigData.title);
           
-          if (!gigData) {
-            console.error('[AppState] Failed to flatten gig data:', gig);
+          // Try to update first, then insert if doesn't exist
+          try {
+            // Try PATCH (update)
+            const updateUrl = `${supabaseClient.url}/rest/v1/gigs?user_id=eq.extension_user&url=eq.${encodeURIComponent(gig.url || '')}`;
+            const updateResponse = await fetch(updateUrl, {
+              method: 'PATCH',
+              headers: {
+                'apikey': supabaseClient.key,
+                'Authorization': `Bearer ${supabaseClient.key}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+              },
+              body: JSON.stringify(gigData)
+            });
+            
+            if (updateResponse.ok) {
+              console.log('[AppState] Gig updated successfully');
+            } else {
+              console.log('[AppState] Update failed, trying insert...');
+              await fetchSupabaseData('POST', 'gigs', gigData);
+              console.log('[AppState] Gig inserted successfully');
+            }
+          } catch (e) {
+            console.log('[AppState] Update attempt failed:', e.message);
+            await fetchSupabaseData('POST', 'gigs', gigData);
+            console.log('[AppState] Gig inserted successfully');
+          }
+
+          // Get the inserted gig's ID by querying it back
+          const queryResponse = await fetch(
+            `${supabaseClient.url}/rest/v1/gigs?url=eq.${encodeURIComponent(gig.url)}&select=id`,
+            {
+              headers: {
+                'apikey': supabaseClient.key,
+                'Authorization': `Bearer ${supabaseClient.key}`,
+              }
+            }
+          );
+          const gigs_response = await queryResponse.json();
+          const gigId = gigs_response[0]?.id;
+
+          if (!gigId) {
+            console.error('[AppState] Could not get gig ID after insertion');
             continue;
           }
 
-          // Delete existing record if any
+          // 2. Delete old packages and details for this gig before inserting new ones
+          console.log('[AppState] Deleting old packages for gig:', gigId);
           try {
-            await fetchSupabaseData('DELETE', 'gigs', null, '*', { 
-              user_id: gigData.user_id, 
-              url: gigData.url 
-            });
-          } catch (deleteError) {
-            console.log('[AppState] Delete attempt (may not exist):', deleteError.message);
+            await fetch(
+              `${supabaseClient.url}/rest/v1/gig_packages?gig_id=eq.${gigId}`,
+              {
+                method: 'DELETE',
+                headers: {
+                  'apikey': supabaseClient.key,
+                  'Authorization': `Bearer ${supabaseClient.key}`,
+                }
+              }
+            );
+            
+            await fetch(
+              `${supabaseClient.url}/rest/v1/gig_details?gig_id=eq.${gigId}`,
+              {
+                method: 'DELETE',
+                headers: {
+                  'apikey': supabaseClient.key,
+                  'Authorization': `Bearer ${supabaseClient.key}`,
+                }
+              }
+            );
+            console.log('[AppState] Old data deleted');
+          } catch (e) {
+            console.log('[AppState] Delete attempt error (may not exist):', e.message);
           }
-          
-          // Insert the flattened data
-          console.log('[AppState] Inserting gig:', gigData.title);
-          const insertResult = await fetchSupabaseData('POST', 'gigs', gigData);
-          
-          console.log('[AppState] Successfully inserted gig');
+
+          // 3. Insert packages
+          if (Array.isArray(gig.pricing?.packages) && gig.pricing.packages.length > 0) {
+            for (const pkg of gig.pricing.packages) {
+              const packageData = {
+                gig_id: gigId,
+                package_name: pkg.name || '',
+                package_title: pkg.title || '',
+                description: pkg.description || '',
+                price: extractPrice(pkg.price),
+                total_price: extractPrice(pkg.total_price),
+                delivery_time: pkg.delivery_time || '',
+                revisions: pkg.revisions || ''
+              };
+
+              console.log('[AppState] Inserting package:', packageData.package_name);
+              await fetchSupabaseData('POST', 'gig_packages', packageData);
+
+              // Insert features for this package
+              if (Array.isArray(pkg.features) && pkg.features.length > 0) {
+                // Get the package ID we just inserted
+                const pkgQuery = await fetch(
+                  `${supabaseClient.url}/rest/v1/gig_packages?gig_id=eq.${gigId}&package_name=eq.${encodeURIComponent(pkg.name)}&order=created_at.desc&limit=1&select=id`,
+                  {
+                    headers: {
+                      'apikey': supabaseClient.key,
+                      'Authorization': `Bearer ${supabaseClient.key}`,
+                    }
+                  }
+                );
+                const pkgResult = await pkgQuery.json();
+                const packageId = pkgResult[0]?.id;
+
+                if (packageId) {
+                  for (const feature of pkg.features) {
+                    const featureData = {
+                      package_id: packageId,
+                      feature_name: feature.name || '',
+                      feature_value: feature.value || ''
+                    };
+                    await fetchSupabaseData('POST', 'package_features', featureData);
+                  }
+                }
+              }
+            }
+          }
+
+          // 3. Insert details
+          const detailsData = {
+            gig_id: gigId,
+            description_full: gig.description?.content || gig.description || '',
+            faq: JSON.stringify(Array.isArray(gig.description?.faq) ? gig.description.faq : []),
+            requirements: JSON.stringify(Array.isArray(gig.requirements?.list) ? gig.requirements.list : []),
+            what_to_provide: JSON.stringify(Array.isArray(gig.requirements?.what_to_provide) ? gig.requirements.what_to_provide : []),
+            what_you_get: JSON.stringify(Array.isArray(gig.requirements?.what_you_get) ? gig.requirements.what_you_get : []),
+            gallery_images: JSON.stringify(Array.isArray(gig.gallery?.images) ? gig.gallery.images : []),
+            gallery_videos: JSON.stringify(Array.isArray(gig.gallery?.videos) ? gig.gallery.videos : [])
+          };
+
+          console.log('[AppState] Inserting details for gig:', gigId);
+          await fetchSupabaseData('POST', 'gig_details', detailsData);
+
           successCount++;
+          console.log(`[AppState] ✓ Completed gig: ${gig.title}`);
           
           // Polite delay between inserts
           await new Promise(r => setTimeout(r, 300));
         } catch (e) {
-          console.error('[AppState] Failed to save gig:', e, gig);
+          console.error(`[AppState] Failed to save gig: ${e.message}`);
         }
       }
 
-      console.log(`[AppState] Successfully saved ${successCount}/${gigs.length} gigs`);
+      console.log(`[AppState] ✓ Saved ${successCount}/${gigs.length} gigs`);
       return { success: true, count: successCount };
     } catch (error) {
       console.error('[AppState] Failed to save gigs:', error);
@@ -326,12 +340,12 @@
 
   async function syncGigs(gigs) {
     try {
-      // Save to local storage first
       await saveGigsToStorage(gigs);
       
-      // Try to save to Supabase
       if (connectionStatus.connected) {
         await saveGigsToSupabase(gigs);
+      } else {
+        console.log('[AppState] Supabase not connected, saving to local storage only');
       }
       
       return { success: true, synced: connectionStatus.connected };
@@ -342,47 +356,14 @@
   }
 
   async function testSupabaseSetup() {
-    console.log('[AppState] Testing complete Supabase setup...');
-    
+    console.log('[AppState] Testing Supabase setup...');
     try {
       const connected = await testSupabaseConnection();
-      if (!connected) {
-        return { success: false, error: 'Connection failed', details: connectionStatus };
-      }
-
-      const testGig = {
-        url: 'https://test.com/gig1',
-        title: 'Test Gig',
-        user_id: 'extension_user',
-        scraped_at: new Date().toISOString(),
-        overview_title: 'Test Overview',
-        seller_name: 'Test Seller',
-        tags: JSON.stringify(['test', 'sample']),
-        packages: JSON.stringify([{ name: 'Test', price: '$10', desc: 'Test package' }])
-      };
-
-      console.log('[AppState] Testing with sample data...');
-      
-      try {
-        await fetchSupabaseData('DELETE', 'gigs', null, '*', { 
-          user_id: 'extension_user', 
-          url: 'https://test.com/gig1' 
-        });
-      } catch (deleteError) {
-        console.log('[AppState] Delete test record (may not exist)');
-      }
-      
-      const insertResult = await fetchSupabaseData('POST', 'gigs', testGig);
-      console.log('[AppState] Insert test result:', insertResult);
-
       return { 
-        success: true, 
-        connection: connectionStatus,
-        insertTest: insertResult
+        success: connected, 
+        connection: connectionStatus
       };
-
     } catch (error) {
-      console.error('[AppState] Setup test failed:', error);
       return { 
         success: false, 
         error: error.message,
@@ -394,15 +375,10 @@
   const listeners = new Set();
   chrome.storage.onChanged.addListener((changes, area) => {
     if (changes[STORAGE_KEY]) {
-      const newVal = changes[STORAGE_KEY].newValue || { url: '', key: '' };
-      listeners.forEach(cb => {
-        try { cb(newVal); } catch(e) { console.error('AppState listener error', e); }
-      });
       initializeSupabase();
     }
   });
 
-  // Expose API on window
   window.AppState = {
     getSupabaseConfig,
     setSupabaseConfig,
@@ -412,17 +388,14 @@
     testSupabaseSetup,
     saveGigsToStorage,
     getGigsFromStorage,
-    saveGigsToSupabase,
     syncGigs,
     onChange: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
     getStorage,
     setStorage
   };
 
-  // Auto-initialize
   initializeSupabase();
 
-  // Ensure defaults
   (async function ensureDefaultConfig(){
     try {
       const cfg = await getSupabaseConfig();
@@ -430,7 +403,7 @@
       if (needWrite) {
         await setSupabaseConfig(DEFAULT_SUPABASE_CONFIG);
         await initializeSupabase();
-        console.log('[AppState] Config updated with defaults');
+        console.log('[AppState] Config updated');
       }
     } catch(e) { 
       console.error('[AppState] Config error', e); 

@@ -9,10 +9,11 @@
     return el ? clean(el.textContent) : ''; 
   }
 
-  function getAllTexts(sel){ 
-    return [...document.querySelectorAll(sel)]
-      .map(n => clean(n.textContent))
-      .filter(Boolean); 
+  function getInputValue(sel){
+    const el = document.querySelector(sel);
+    if (!el) return '';
+    const v = (el.value !== undefined ? el.value : el.getAttribute('value')) || '';
+    return clean(v);
   }
 
   function getImages(sel){ 
@@ -22,62 +23,152 @@
       .filter(url => url && !url.includes('data:') && url.length > 10); 
   }
 
-  function getInputValue(sel){
-    const el = document.querySelector(sel);
-    if (!el) return '';
-    const v = (el.value !== undefined ? el.value : el.getAttribute('value')) || '';
-    return clean(v);
-  }
-
-  // Extract pricing packages from the pricing section
+  // Extract pricing packages with all details from table
   function extractPricing(){
     try {
       const packages = [];
       
-      // Try to find package rows in edit form
-      const packageRows = document.querySelectorAll(
-        '[data-testid*="package"], .package-row, .package-item, [class*="package-card"]'
-      );
+      console.log('[gig_scraper] Starting pricing extraction...');
       
-      if (packageRows.length > 0) {
-        packageRows.forEach((row, idx) => {
-          const nameEl = row.querySelector('input[name*="name"], input[placeholder*="name"]');
-          const priceEl = row.querySelector('input[name*="price"], input[placeholder*="price"]');
-          const descEl = row.querySelector('textarea[name*="desc"], textarea[placeholder*="description"]');
+      // Strategy 1: Extract from table structure (most common on pricing page)
+      const table = document.querySelector('table');
+      if (table) {
+        console.log('[gig_scraper] Found pricing table');
+        
+        // Get all header cells to identify package names
+        const headerRow = table.querySelector('thead tr:last-child') || table.querySelector('thead tr');
+        if (!headerRow) {
+          console.log('[gig_scraper] No header row found');
+          return [];
+        }
+        
+        const headers = headerRow.querySelectorAll('th, td');
+        const packageNames = [];
+        
+        // Find headers that are package names (skip first column which is labels)
+        headers.forEach((header, idx) => {
+          const name = clean(header.textContent);
+          // Skip if it's the label column (first) or empty
+          if (idx > 0 && name && name.length > 0 && !name.match(/\$|price|description|label/i)) {
+            packageNames.push({ name, colIdx: idx });
+          }
+        });
+        
+        console.log('[gig_scraper] Package names found:', packageNames.map(p => p.name));
+        
+        if (packageNames.length === 0) {
+          console.log('[gig_scraper] No packages found in headers, trying alternative detection...');
+          // Look for columns with data
+          const firstRow = table.querySelector('tbody tr');
+          if (firstRow) {
+            const cells = firstRow.querySelectorAll('td');
+            for (let i = 1; i < cells.length; i++) {
+              const headerCell = headers[i];
+              if (headerCell) {
+                const name = clean(headerCell.textContent);
+                if (name && name.length > 0) {
+                  packageNames.push({ name, colIdx: i });
+                }
+              }
+            }
+          }
+        }
+        
+        // Extract data for each package column
+        packageNames.forEach(({ name, colIdx }) => {
+          const pkg = {
+            name: name,
+            title: '',
+            description: '',
+            price: '',
+            delivery_time: '',
+            revisions: '',
+            features: []
+          };
           
-          const name = nameEl?.value || clean(row.querySelector('h3')?.textContent || '');
-          const price = priceEl?.value || clean(row.querySelector('.price')?.textContent || '');
-          const desc = descEl?.value || clean(row.querySelector('.description')?.textContent || '');
+          // Get all body rows
+          const bodyRows = table.querySelectorAll('tbody tr');
+          console.log('[gig_scraper] Processing', bodyRows.length, 'rows for package:', name);
           
-          if (name || price) {
-            packages.push({ 
-              name: name || `Package ${idx + 1}`, 
-              price: price || 'Custom', 
-              desc: desc || '' 
-            });
+          bodyRows.forEach((row, rowIdx) => {
+            const cells = row.querySelectorAll('td');
+            const labelCell = cells[0];
+            const dataCell = cells[colIdx];
+            
+            if (!dataCell) return;
+            
+            const label = clean(labelCell?.textContent || '');
+            const value = clean(dataCell.textContent || '');
+            
+            console.log(`[gig_scraper] Row ${rowIdx}: Label="${label}", Value="${value}"`);
+            
+            // Skip empty values
+            if (!value || value === '' || value === '✓' || value === '✕') {
+              return;
+            }
+            
+            // Match row labels to package properties
+            const labelLower = label.toLowerCase();
+            
+            if (labelLower.includes('title') || labelLower.includes('name')) {
+              pkg.title = value;
+            } else if (labelLower.includes('description') || labelLower.includes('desc')) {
+              pkg.description = value;
+            } else if (labelLower.includes('price') || value.match(/^\$|€|₹|\d+/)) {
+              pkg.price = value;
+            } else if (labelLower.includes('delivery') || labelLower.includes('days')) {
+              pkg.delivery_time = value;
+            } else if (labelLower.includes('revision')) {
+              pkg.revisions = value;
+            } else {
+              // Everything else is a feature/attribute
+              pkg.features.push({
+                name: label || `Attribute ${pkg.features.length + 1}`,
+                value: value
+              });
+            }
+          });
+          
+          // Only add package if it has at least name
+          if (pkg.name) {
+            packages.push(pkg);
+            console.log('[gig_scraper] ✓ Extracted package:', pkg);
           }
         });
       }
       
-      // Fallback: look for price displays on view page
+      // Strategy 2: If table extraction didn't work, try looking for input fields directly
       if (packages.length === 0) {
-        const priceCards = document.querySelectorAll('.package, [class*="pricing"]');
-        priceCards.forEach((card, idx) => {
-          const price = clean(card.querySelector('.price, [class*="price"]')?.textContent || '');
-          const name = clean(card.querySelector('h3, .title')?.textContent || '');
-          if (price) {
+        console.log('[gig_scraper] Table extraction failed, trying input fields...');
+        
+        // Look for package input groups
+        const packageContainers = document.querySelectorAll('[data-testid*="package"], [class*="package-row"], .row');
+        
+        packageContainers.forEach((container, idx) => {
+          const nameInput = container.querySelector('input[name*="name"], input[placeholder*="name"]');
+          const priceInput = container.querySelector('input[name*="price"], input[placeholder*="price"]');
+          const descInput = container.querySelector('textarea[name*="desc"], textarea[placeholder*="description"]');
+          
+          const name = nameInput?.value || clean(container.querySelector('h3, h2')?.textContent || '');
+          const price = priceInput?.value || clean(container.querySelector('[class*="price"]')?.textContent || '');
+          const desc = descInput?.value || '';
+          
+          if (name || price) {
             packages.push({
               name: name || `Package ${idx + 1}`,
               price: price,
-              desc: ''
+              description: desc,
+              features: []
             });
+            console.log('[gig_scraper] Extracted from inputs:', name);
           }
         });
       }
       
+      console.log('[gig_scraper] ✓ Total packages extracted:', packages.length);
       return packages;
     } catch(e) { 
-      console.warn('extractPricing error', e); 
+      console.error('[gig_scraper] extractPricing error:', e); 
       return [];
     }
   }
@@ -120,7 +211,7 @@
     for (let i = 0; i < allEditors.length; i++) {
       const editor = allEditors[i];
       const text = clean(editor.textContent);
-      console.log('[gig_scraper] Editor', i, 'text length:', text.length, 'preview:', text.substring(0, 60));
+      console.log('[giq_scraper] Editor', i, 'text length:', text.length, 'preview:', text.substring(0, 60));
       
       // Check if this editor has real content (not placeholder, not empty, substantial length)
       if (text && 
@@ -148,7 +239,7 @@
       }
     }
     
-    // Strategy 3: Check for any stored value in hidden inputs or data attributes
+    // Strategy 3: Check for any stored value in hidden inputs
     if (!description) {
       const hiddenInput = document.querySelector('input[type="hidden"][name="description"]');
       if (hiddenInput && hiddenInput.value && hiddenInput.value.length > 100) {
@@ -162,6 +253,7 @@
       console.log('[gig_scraper] Description preview:', description.substring(0, 150) + '...');
     }
     
+    // Extract FAQ
     const faq = [];
     const faqRows = document.querySelectorAll('[data-testid*="faq"], .faq-item, [class*="faq"]');
     
@@ -262,7 +354,8 @@
     if (msg && msg.type === 'SCRAPE_GIG'){
       (async () => {
         try {
-          await new Promise(r => setTimeout(r, 500));
+          // Wait for content to fully load
+          await new Promise(r => setTimeout(r, 1000));
 
           // Extract all data with proper structure
           const overview = extractOverview();

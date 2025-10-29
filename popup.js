@@ -1,4 +1,4 @@
-// popup.js
+// popup.js - COMPLETE UPDATED VERSION
 
 const runBtn   = document.getElementById("run");
 const exportBtn= document.getElementById("export");
@@ -12,6 +12,7 @@ const filterEl = document.getElementById("filter");
 const progressContainer = document.getElementById("progressContainer");
 const progressBar = document.getElementById("progressBar");
 const progressText = document.getElementById("progressText");
+
 // Modal elements
 const loginModal = document.getElementById("loginModal");
 const successModal = document.getElementById("successModal");
@@ -20,7 +21,7 @@ const checkLoginBtn = document.getElementById("checkLoginBtn");
 const closeModalBtn = document.getElementById("closeModalBtn");
 const reloadBtn = document.getElementById("reloadBtn");
 
-let gigs = [];   // [{title,url}]
+let gigs = [];
 let view = [];
 let currentTabId = null;
 
@@ -31,6 +32,7 @@ const saveSupabaseBtn = document.getElementById('saveSupabase');
 const clearSupabaseBtn = document.getElementById('clearSupabase');
 const testSupabaseBtn = document.getElementById('testSupabase');
 
+// ========== SUPABASE CONFIG FUNCTIONS ==========
 async function loadSupabaseConfig(){
   try{
     if (window.AppState && typeof window.AppState.getSupabaseConfig === 'function'){
@@ -38,11 +40,9 @@ async function loadSupabaseConfig(){
       supabaseUrlEl.value = cfg.url || '';
       supabaseKeyEl.value = cfg.key || '';
       
-      // Check connection status and update UI
       const connectionStatus = window.AppState.getConnectionStatus();
       updateSupabaseStatus(connectionStatus);
     } else {
-      // fallback to chrome.storage
       chrome.storage.local.get('supabase_config', (r)=>{
         const cfg = r.supabase_config || {url:'', key:''};
         supabaseUrlEl.value = cfg.url || '';
@@ -58,7 +58,6 @@ async function saveSupabaseConfig(){
     if (window.AppState && typeof window.AppState.setSupabaseConfig === 'function'){
       await window.AppState.setSupabaseConfig(cfg);
       
-      // Test connection after saving
       updateStatus('Testing Supabase connection...', 'loading');
       const connected = await window.AppState.testSupabaseConnection();
       const connectionStatus = window.AppState.getConnectionStatus();
@@ -74,7 +73,10 @@ async function saveSupabaseConfig(){
       chrome.storage.local.set({ supabase_config: cfg });
       updateStatus('Supabase config saved', 'success');
     }
-  }catch(e){ console.error('saveSupabaseConfig', e); updateStatus('Failed to save config','error'); }
+  }catch(e){ 
+    console.error('saveSupabaseConfig', e); 
+    updateStatus('Failed to save config','error'); 
+  }
 }
 
 async function clearSupabaseConfig(){
@@ -89,10 +91,12 @@ async function clearSupabaseConfig(){
     supabaseKeyEl.value = '';
     updateStatus('Supabase config cleared', 'info');
     
-    // Update status display
     const connectionStatus = { connected: false, lastChecked: new Date(), error: 'Configuration cleared' };
     updateSupabaseStatus(connectionStatus);
-  }catch(e){ console.error('clearSupabaseConfig', e); updateStatus('Failed to clear config','error');   }
+  }catch(e){ 
+    console.error('clearSupabaseConfig', e); 
+    updateStatus('Failed to clear config','error');
+  }
 }
 
 async function testSupabaseConnection() {
@@ -114,7 +118,6 @@ async function testSupabaseConnection() {
       console.error('[Popup] Supabase test failed:', testResult);
     }
     
-    // Update Supabase status
     const connectionStatus = window.AppState.getConnectionStatus();
     updateSupabaseStatus(connectionStatus);
     
@@ -124,26 +127,9 @@ async function testSupabaseConnection() {
   }
 }
 
-// Progress bar functions
-function showProgress() {
-  progressContainer.style.display = 'flex';
-}
-
-function hideProgress() {
-  progressContainer.style.display = 'none';
-}
-
-function updateProgress(current, total) {
-  const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
-  progressBar.style.width = `${percentage}%`;
-  progressText.textContent = `${percentage}%`;
-}
-
-// Update Supabase connection status in UI
 function updateSupabaseStatus(connectionStatus) {
-  const statusIndicator = document.getElementById('supabaseStatus');
+  let statusIndicator = document.getElementById('supabaseStatus');
   if (!statusIndicator) {
-    // Create status indicator if it doesn't exist
     const statusDiv = document.createElement('div');
     statusDiv.id = 'supabaseStatus';
     statusDiv.style.cssText = `
@@ -158,23 +144,25 @@ function updateSupabaseStatus(connectionStatus) {
     if (supabaseSection) {
       supabaseSection.appendChild(statusDiv);
     }
+    statusIndicator = statusDiv;
   }
   
-  const indicator = document.getElementById('supabaseStatus');
-  if (indicator) {
+  if (statusIndicator) {
     if (connectionStatus.connected) {
-      indicator.textContent = '✅ Connected to Supabase';
-      indicator.style.background = 'rgba(16, 185, 129, 0.1)';
-      indicator.style.color = 'var(--success)';
-      indicator.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+      statusIndicator.textContent = '✅ Connected to Supabase';
+      statusIndicator.style.background = 'rgba(16, 185, 129, 0.1)';
+      statusIndicator.style.color = 'var(--success)';
+      statusIndicator.style.border = '1px solid rgba(16, 185, 129, 0.3)';
     } else {
-      indicator.textContent = connectionStatus.error ? `❌ ${connectionStatus.error}` : '⚠️ Not connected';
-      indicator.style.background = 'rgba(239, 68, 68, 0.1)';
-      indicator.style.color = 'var(--error)';
-      indicator.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      statusIndicator.textContent = connectionStatus.error ? `❌ ${connectionStatus.error}` : '⚠️ Not connected';
+      statusIndicator.style.background = 'rgba(239, 68, 68, 0.1)';
+      statusIndicator.style.color = 'var(--error)';
+      statusIndicator.style.border = '1px solid rgba(239, 68, 68, 0.3)';
     }
   }
 }
+
+// ========== UI FUNCTIONS ==========
 function render(items) {
   if (items.length === 0) {
     listEl.innerHTML = `
@@ -211,13 +199,29 @@ function render(items) {
   exportBtn.disabled = items.length === 0;
   copyBtn.disabled = items.length === 0;
 }
+
 function applyFilter() {
   const q = (filterEl.value || "").toLowerCase().trim();
   view = q ? gigs.filter(g => g.title.toLowerCase().includes(q)) : gigs.slice();
   render(view);
 }
 
-// Modal management functions
+// ========== PROGRESS BAR FUNCTIONS ==========
+function showProgress() {
+  progressContainer.style.display = 'flex';
+}
+
+function hideProgress() {
+  progressContainer.style.display = 'none';
+}
+
+function updateProgress(current, total) {
+  const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+  progressBar.style.width = `${percentage}%`;
+  progressText.textContent = `${percentage}%`;
+}
+
+// ========== MODAL FUNCTIONS ==========
 function showLoginModal() {
   loginModal.style.display = "flex";
   document.body.style.overflow = "hidden";
@@ -239,16 +243,32 @@ function hideSuccessModal() {
   document.body.style.overflow = "auto";
 }
 
+// ========== STATUS FUNCTIONS ==========
+function setLoadingState(isLoading, message = "") {
+  runBtn.disabled = isLoading;
+  if (isLoading) {
+    runBtn.classList.add("loading");
+    runBtn.innerHTML = `<span>${message || "Processing..."}</span>`;
+  } else {
+    runBtn.classList.remove("loading");
+    runBtn.innerHTML = `<span>Scan & Load Gigs</span>`;
+  }
+}
+
+function updateStatus(message, type = "info") {
+  statusEl.textContent = message;
+  statusEl.className = `status-message ${type}`;
+}
+
+// ========== LOGIN FUNCTIONS ==========
 async function openFiverrLogin() {
   try {
     if (currentTabId) {
-      // Update existing tab to Fiverr login
       await chrome.tabs.update(currentTabId, { 
         url: "https://www.fiverr.com/login",
         active: true 
       });
     } else {
-      // Create new tab for Fiverr login
       const tab = await chrome.tabs.create({ 
         url: "https://www.fiverr.com/login",
         active: true 
@@ -268,7 +288,6 @@ async function checkLoginStatus() {
       return false;
     }
 
-    // Inject content script and check login
     await inject(currentTabId);
     const result = await send(currentTabId, { type: "CHECK_LOGIN" });
     
@@ -290,7 +309,6 @@ async function checkLoginStatus() {
 function reloadExtension() {
   hideSuccessModal();
   updateStatus("Extension reloaded. Ready to scan your gigs.", "success");
-  // Reset state
   gigs = [];
   view = [];
   render([]);
@@ -313,7 +331,6 @@ async function continueAfterLogin() {
       gigs = Array.isArray(res.gigs) ? res.gigs : [];
       filterEl.value = "";
       
-      // Scrape detailed info for each gig, then sync to storage/Supabase
       try {
         updateStatus('Collecting detailed gig info (this may take a while)...', 'loading');
         setLoadingState(true, 'Scraping gigs...');
@@ -332,7 +349,6 @@ async function continueAfterLogin() {
         setLoadingState(false);
         updateStatus(successMessage, detailed.length > 0 ? "success" : "warning");
 
-        // Update Supabase status
         const connectionStatus = window.AppState.getConnectionStatus();
         updateSupabaseStatus(connectionStatus);
       } catch (syncError) {
@@ -360,20 +376,24 @@ async function continueAfterLogin() {
   }
 }
 
-// ----- tab helpers (run inside popup) -----
+// ========== TAB HELPERS ==========
 function waitForComplete(tabId, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     chrome.tabs.get(tabId, (t) => {
       if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
       if (!t) return reject(new Error("Tab not found"));
       if (t.status === "complete") return resolve();
+      
       const timer = setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(listener);
         reject(new Error("Timeout waiting for tab to load"));
       }, timeoutMs);
+      
       function listener(id, info) {
         if (id === tabId && info.status === "complete") {
-          clearTimeout(timer); chrome.tabs.onUpdated.removeListener(listener); resolve();
+          clearTimeout(timer);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
         }
       }
       chrome.tabs.onUpdated.addListener(listener);
@@ -384,397 +404,39 @@ function waitForComplete(tabId, timeoutMs = 30000) {
 async function openOrReuseFiverrTab() {
   const HOME = "https://www.fiverr.com/";
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-  // If current tab is Fiverr already, reuse it
+  
   if (active && active.url && active.url.includes("fiverr.com")) {
     await chrome.tabs.update(active.id, { url: HOME });
     await waitForComplete(active.id);
     return active.id;
   }
-  // Otherwise open a new one
+  
   const created = await chrome.tabs.create({ url: HOME });
   await waitForComplete(created.id);
   return created.id;
 }
 
 async function inject(tabId) {
-  // ensure state helper is injected first
   await chrome.scripting.executeScript({ target: { tabId }, files: ["state.js"] });
   await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
 }
 
 async function send(tabId, payload) {
   const sendOnce = () => chrome.tabs.sendMessage(tabId, payload);
-  try { return await sendOnce(); }
-  catch {
+  try { 
+    return await sendOnce(); 
+  } catch {
     await inject(tabId);
     await new Promise(r => setTimeout(r, 400));
     return await sendOnce();
   }
 }
 
-// send a message to a tab but ensure gig_scraper is injected when needed
-async function sendToTabForScraper(tabId, payload) {
-  const sendOnce = () => new Promise((res, rej) => {
-    try {
-      chrome.tabs.sendMessage(tabId, payload, (r) => {
-        if (chrome.runtime.lastError) return rej(chrome.runtime.lastError);
-        res(r);
-      });
-    } catch (e) { rej(e); }
-  });
-
-  try { return await sendOnce(); }
-  catch (e) {
-    // inject state + gig scraper explicitly then retry
-    try {
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['state.js'] });
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['gig_scraper.js'] });
-      await new Promise(r => setTimeout(r, 300));
-      return await sendOnce();
-    } catch (e2) {
-      console.error('sendToTabForScraper failed', e, e2);
-      throw e2 || e;
-    }
-  }
-}
-
-// Sequentially visit each gig URL, inject scraper, and collect detailed info
+// ========== GIG SCRAPING FUNCTIONS ==========
 async function scrapeAllGigDetails(gigList) {
   const detailed = [];
   if (!Array.isArray(gigList) || gigList.length === 0) return detailed;
 
-  // Show progress bar
-  showProgress();
-  updateProgress(0, gigList.length);
-
-  // We'll reuse currentTabId for navigation
-  for (let i = 0; i < gigList.length; ++i) {
-    const gig = gigList[i];
-    updateStatus(`Scraping gig ${i+1}/${gigList.length}: ${gig.title}`, 'loading');
-    updateProgress(i, gigList.length);
-    try {
-      if (!gig.url) {
-        detailed.push({ ...gig, error: 'no_url' });
-        continue;
-      }
-
-      // Open a background tab for scraping to avoid navigating the user's active tab
-  const targetUrl = gig.editUrl && gig.editUrl.length ? gig.editUrl : gig.url;
-  const scraped = await (async function openTabAndScrape(url){
-        let tab;
-        try {
-          tab = await new Promise((res, rej) => {
-            chrome.tabs.create({ url, active: false }, (t) => {
-              if (chrome.runtime.lastError) return rej(chrome.runtime.lastError);
-              res(t);
-            });
-          });
-
-          const tabId = tab.id;
-          // Wait for page load
-          await waitForComplete(tabId, 30000).catch(()=>{});
-
-          // Inject state and scraper
-          await chrome.scripting.executeScript({ target: { tabId }, files: ['state.js'] });
-          await chrome.scripting.executeScript({ target: { tabId }, files: ['gig_scraper.js'] });
-
-          // Ask the scraper for details
-          const result = await new Promise((res, rej) => {
-            try {
-              chrome.tabs.sendMessage(tabId, { type: 'SCRAPE_GIG' }, (r) => {
-                if (chrome.runtime.lastError) return rej(chrome.runtime.lastError);
-                res(r);
-              });
-            } catch (e) { rej(e); }
-          });
-
-          return result;
-        } catch (err) {
-          console.error('openTabAndScrape error', err);
-          return { status: 'ERR', error: String(err) };
-        } finally {
-          // close the tab we opened, if any
-          try { if (tab && tab.id) chrome.tabs.remove(tab.id); } catch(e){/*ignore*/}
-        }
-  })(targetUrl);
-
-      if (scraped && scraped.status === 'OK' && scraped.details) {
-        detailed.push(scraped.details);
-      } else {
-        detailed.push({ url: gig.url, title: gig.title, error: scraped ? scraped.error : 'no_response' });
-      }
-
-      // polite delay to avoid hammering
-      await new Promise(r => setTimeout(r, 600));
-    } catch (e) {
-      console.error('Navigation or scraping failed for', gig.url, e);
-      detailed.push({ url: gig.url, title: gig.title, error: String(e) });
-    }
-  }
-
-  // Hide progress bar when done
-  hideProgress();
-  updateProgress(gigList.length, gigList.length);
-  
-  return detailed;
-}
-async function waitUntilLoggedIn(tabId, maxMs = 120000) {
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    statusEl.textContent = "Waiting for login…";
-    const { loggedIn } = await send(tabId, { type: "CHECK_LOGIN" });
-    if (loggedIn) return true;
-    await new Promise(r => setTimeout(r, 1500));
-  }
-  return false;
-}
-
-// Loading state management
-function setLoadingState(isLoading, message = "") {
-  runBtn.disabled = isLoading;
-  if (isLoading) {
-    runBtn.classList.add("loading");
-    runBtn.innerHTML = `<span>${message || "Processing..."}</span>`;
-  } else {
-    runBtn.classList.remove("loading");
-    runBtn.innerHTML = `<span>Scan & Load Gigs</span>`;
-  }
-}
-
-function updateStatus(message, type = "info") {
-  statusEl.textContent = message;
-  statusEl.className = `status-message ${type}`;
-}
-
-// ----- main flow -----
-async function run() {
-  try {
-    setLoadingState(true, "Opening Fiverr...");
-    updateStatus("Connecting to Fiverr...", "loading");
-    
-    const tabId = await openOrReuseFiverrTab();
-    currentTabId = tabId;
-    await inject(tabId);
-
-    // Ensure login (content.js will navigate to /login if needed)
-    setLoadingState(true, "Checking login...");
-    updateStatus("Verifying authentication...", "loading");
-    
-    const loginRes = await send(tabId, { type: "ENSURE_LOGIN" });
-    if (!loginRes?.loggedIn) {
-      setLoadingState(false);
-      updateStatus("Authentication required. Please sign in to continue.", "warning");
-      showLoginModal();
-      return;
-    }
-
-    setLoadingState(true, "Scanning gigs...");
-    updateStatus("Navigating to gigs page and extracting data...", "loading");
-    
-    const res = await send(tabId, { type: "NAV_TO_GIGS_AND_SCRAPE" });
-
-    if (res?.status === "OK") {
-      gigs = Array.isArray(res.gigs) ? res.gigs : [];
-      filterEl.value = "";
-      
-      // Scrape detailed info for each gig, then sync to storage/Supabase
-      try {
-        updateStatus('Collecting detailed gig info (this may take a while)...', 'loading');
-        setLoadingState(true, 'Scraping gigs...');
-
-        const detailed = await scrapeAllGigDetails(gigs);
-
-        updateStatus('Saving detailed gigs to storage and Supabase...', 'loading');
-        const syncResult = await window.AppState.syncGigs(detailed);
-
-        const debugInfo = res.debug ? ` from ${new URL(res.debug.url).pathname}` : '';
-        const syncInfo = syncResult.synced ? ' (synced to Supabase)' : ' (local storage only)';
-        const successMessage = detailed.length > 0 
-          ? `Successfully scraped and stored ${detailed.length} gig${detailed.length === 1 ? '' : 's'}${debugInfo}${syncInfo}`
-          : "Scraping completed - no gigs found";
-
-        setLoadingState(false);
-        updateStatus(successMessage, detailed.length > 0 ? "success" : "warning");
-
-        // Update Supabase status
-        const connectionStatus = window.AppState.getConnectionStatus();
-        updateSupabaseStatus(connectionStatus);
-      } catch (syncError) {
-        console.error('Failed to scrape or sync gigs:', syncError);
-        setLoadingState(false);
-        updateStatus('Scraping completed but failed to save all data. Check console for details.', 'warning');
-      }
-      
-      // Log debug information to console for troubleshooting
-      if (res.debug) {
-        console.log("[Fiverr Reader] Success debug info:", res.debug);
-      }
-      if (gigs.length === 0) {
-        console.log("[Fiverr Reader] No gigs found. Please check if you have active gigs in your account.");
-      }
-      
-      applyFilter();
-      return;
-    }
-
-    if (res?.status === "LOGIN_REQUIRED") {
-      setLoadingState(false);
-      updateStatus("Authentication required. Please sign in to continue.", "warning");
-      showLoginModal();
-      return;
-    }
-
-    // Handle errors
-    setLoadingState(false);
-    
-    // Log error information for debugging
-    if (res?.debug) {
-      console.log("[Fiverr Reader] Error debug info:", res.debug);
-    }
-    if (res?.error) {
-      console.log("[Fiverr Reader] Error details:", res.error);
-    }
-    
-    updateStatus("Failed to scan gigs. Please check the console for details.", "error");
-  } catch (e) {
-    console.error("[Fiverr Reader] Unexpected error:", e);
-    setLoadingState(false);
-    updateStatus("An unexpected error occurred. Please try again.", "error");
-  }
-}
-
-runBtn.addEventListener("click", run);
-exportBtn.addEventListener("click", () => {
-  const rows = view.length ? view : gigs;
-  const csv = ["Title,URL"]
-    .concat(rows.map(({ title, url }) =>
-      `"${(title||"").replace(/"/g,'""')}","${(url||"").replace(/"/g,'""')}"`))
-    .join("\n");
-  
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); 
-  a.href = url; 
-  a.download = `fiverr_gigs_${new Date().toISOString().split('T')[0]}.csv`; 
-  a.click();
-  URL.revokeObjectURL(url);
-  
-  // Provide feedback
-  updateStatus(`Exported ${rows.length} gig${rows.length === 1 ? '' : 's'} to CSV file.`, "success");
-  
-  // Temporarily change button text
-  const originalText = exportBtn.textContent;
-  exportBtn.textContent = "Exported!";
-  exportBtn.style.background = "var(--success)";
-  
-  setTimeout(() => {
-    exportBtn.textContent = originalText;
-    exportBtn.style.background = "";
-  }, 2000);
-});
-copyBtn.addEventListener("click", async () => {
-  const items = view.length ? view : gigs;
-  const lines = items.map(g => g.title).join("\n");
-  
-  try { 
-    await navigator.clipboard.writeText(lines); 
-    updateStatus(`Copied ${items.length} gig title${items.length === 1 ? '' : 's'} to clipboard.`, "success");
-    
-    // Temporarily change button text
-    const originalText = copyBtn.textContent;
-    copyBtn.textContent = "Copied!";
-    copyBtn.style.background = "var(--success)";
-    
-    setTimeout(() => {
-      copyBtn.textContent = originalText;
-      copyBtn.style.background = "";
-    }, 2000);
-  }
-  catch { 
-    updateStatus("Failed to copy to clipboard. Please try again.", "error");
-  }
-});
-filterEl.addEventListener("input", applyFilter);
-
-// Supabase config event listeners
-saveSupabaseBtn.addEventListener('click', saveSupabaseConfig);
-clearSupabaseBtn.addEventListener('click', clearSupabaseConfig);
-testSupabaseBtn.addEventListener('click', testSupabaseConnection);
-
-// Load config on popup open
-loadSupabaseConfig();
-// Modal event listeners
-openLoginBtn.addEventListener("click", openFiverrLogin);
-
-checkLoginBtn.addEventListener("click", async () => {
-  const loggedIn = await checkLoginStatus();
-  // Success modal will be shown if login is successful
-});
-
-closeModalBtn.addEventListener("click", hideLoginModal);
-
-reloadBtn.addEventListener("click", async () => {
-  reloadExtension();
-  // Continue scanning after successful login
-  await continueAfterLogin();
-});
-
-// Close modal when clicking outside
-loginModal.addEventListener("click", (e) => {
-  if (e.target === loginModal) {
-    hideLoginModal();
-  }
-});
-
-successModal.addEventListener("click", (e) => {
-  if (e.target === successModal) {
-    hideSuccessModal();
-  }
-});
-
-// Close modals on Escape key
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    if (loginModal.style.display === "flex") {
-      hideLoginModal();
-    }
-    if (successModal.style.display === "flex") {
-      hideSuccessModal();
-    }
-  }
-});
-// send a message to a tab but ensure gig_scraper is injected when needed
-async function sendToTabForScraper(tabId, payload) {
-  const sendOnce = () => new Promise((res, rej) => {
-    try {
-      chrome.tabs.sendMessage(tabId, payload, (r) => {
-        if (chrome.runtime.lastError) return rej(chrome.runtime.lastError);
-        res(r);
-      });
-    } catch (e) { rej(e); }
-  });
-
-  try { return await sendOnce(); }
-  catch (e) {
-    // inject state + gig scraper explicitly then retry
-    try {
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['state.js'] });
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['gig_scraper.js'] });
-      await new Promise(r => setTimeout(r, 300));
-      return await sendOnce();
-    } catch (e2) {
-      console.error('sendToTabForScraper failed', e, e2);
-      throw e2 || e;
-    }
-  }
-}
-
-// Sequentially visit each gig URL in the same tab, inject scraper, and collect detailed info
-async function scrapeAllGigDetails(gigList) {
-  const detailed = [];
-  if (!Array.isArray(gigList) || gigList.length === 0) return detailed;
-
-  // Show progress bar
   showProgress();
   updateProgress(0, gigList.length);
 
@@ -803,11 +465,6 @@ async function scrapeAllGigDetails(gigList) {
   const buildStepUrls = (baseUrl) => {
     try {
       const u = new URL(baseUrl);
-      // normalize to edit URL
-      if (!/\/edit/i.test(u.pathname)) {
-        // leave as-is if already a step URL
-      }
-      const params = new URLSearchParams(u.search);
       const base = `${u.origin}${u.pathname}`;
       return [
         `${base}?step=0&tab=general`,
@@ -816,7 +473,9 @@ async function scrapeAllGigDetails(gigList) {
         `${base}?step=3&tab=requirements`,
         `${base}?step=4&tab=gallery`,
       ];
-    } catch { return [baseUrl]; }
+    } catch { 
+      return [baseUrl]; 
+    }
   };
 
   for (let i = 0; i < gigList.length; ++i) {
@@ -834,38 +493,72 @@ async function scrapeAllGigDetails(gigList) {
       const stepUrls = buildStepUrls(editBase);
       let merged = { title: gig.title, url: editBase };
 
+      console.log('[Popup] Scraping gig:', gig.title);
+      console.log('[Popup] Step URLs:', stepUrls);
+
       for (let s = 0; s < stepUrls.length; s++) {
         const stepUrl = stepUrls[s];
-        // Navigate to step
-        await chrome.tabs.update(currentTabId, { url: stepUrl });
-        await waitForComplete(currentTabId, 30000).catch(() => {});
-        // Inject scripts
-        await chrome.scripting.executeScript({ target: { tabId: currentTabId }, files: ['state.js'] });
-        await chrome.scripting.executeScript({ target: { tabId: currentTabId }, files: ['gig_scraper.js'] });
-        await new Promise(r => setTimeout(r, 600));
+        console.log(`[Popup] Navigating to step ${s}: ${stepUrl}`);
+        
+        try {
+          // Navigate to step
+          await chrome.tabs.update(currentTabId, { url: stepUrl });
+          await waitForComplete(currentTabId, 30000);
+          console.log(`[Popup] Step ${s} page loaded`);
+          
+          // Extra wait for pricing step
+          if (s === 1) {
+            console.log('[Popup] Extra wait for pricing data...');
+            await new Promise(r => setTimeout(r, 1500));
+          } else {
+            await new Promise(r => setTimeout(r, 800));
+          }
+          
+          // Inject scripts
+          await chrome.scripting.executeScript({ target: { tabId: currentTabId }, files: ['state.js'] });
+          await chrome.scripting.executeScript({ target: { tabId: currentTabId }, files: ['gig_scraper.js'] });
+          await new Promise(r => setTimeout(r, 600));
 
-        const scraped = await new Promise((res, rej) => {
-          try {
-            chrome.tabs.sendMessage(currentTabId, { type: 'SCRAPE_GIG' }, (response) => {
-              if (chrome.runtime.lastError) return rej(new Error(chrome.runtime.lastError.message));
-              if (!response) return rej(new Error('No response from scraper'));
-              res(response);
-            });
-          } catch (e) { rej(e); }
-        });
+          console.log(`[Popup] Requesting SCRAPE_GIG for step ${s}...`);
+          
+          // Request scraping
+          const scraped = await new Promise((res, rej) => {
+            try {
+              chrome.tabs.sendMessage(currentTabId, { type: 'SCRAPE_GIG' }, (response) => {
+                if (chrome.runtime.lastError) {
+                  console.error(`[Popup] Step ${s} error:`, chrome.runtime.lastError);
+                  return rej(new Error(chrome.runtime.lastError.message));
+                }
+                if (!response) {
+                  console.error(`[Popup] Step ${s} no response`);
+                  return rej(new Error('No response from scraper'));
+                }
+                console.log(`[Popup] Step ${s} response:`, response);
+                res(response);
+              });
+            } catch (e) { 
+              console.error(`[Popup] Step ${s} send error:`, e);
+              rej(e); 
+            }
+          });
 
-        if (scraped && scraped.status === 'OK' && scraped.details) {
-          merged = deepMerge(merged, scraped.details);
+          if (scraped && scraped.status === 'OK' && scraped.details) {
+            console.log(`[Popup] Step ${s} success, merging data...`);
+            merged = deepMerge(merged, scraped.details);
+          } else {
+            console.warn(`[Popup] Step ${s} failed or no data`, scraped);
+          }
+
+          await new Promise(r => setTimeout(r, 600));
+        } catch (stepError) {
+          console.error(`[Popup] Error at step ${s}:`, stepError);
         }
-
-        // short delay between steps
-        await new Promise(r => setTimeout(r, 500));
       }
 
       merged.scraped_at = new Date().toISOString();
       detailed.push(merged);
 
-      // Delay between gigs
+      console.log('[Popup] ✓ Completed gig:', merged.title);
       await new Promise(r => setTimeout(r, 1200));
     } catch (e) {
       const errorMsg = e.message || e.toString() || 'Unknown error';
@@ -876,6 +569,197 @@ async function scrapeAllGigDetails(gigList) {
 
   hideProgress();
   updateProgress(gigList.length, gigList.length);
-  console.log(`[Popup] Completed scraping ${detailed.length} gigs`);
+  console.log(`[Popup] ✓ Completed scraping ${detailed.length} gigs`);
   return detailed;
 }
+
+// ========== MAIN FLOW ==========
+async function run() {
+  try {
+    setLoadingState(true, "Opening Fiverr...");
+    updateStatus("Connecting to Fiverr...", "loading");
+    
+    const tabId = await openOrReuseFiverrTab();
+    currentTabId = tabId;
+    await inject(tabId);
+
+    setLoadingState(true, "Checking login...");
+    updateStatus("Verifying authentication...", "loading");
+    
+    const loginRes = await send(tabId, { type: "ENSURE_LOGIN" });
+    if (!loginRes?.loggedIn) {
+      setLoadingState(false);
+      updateStatus("Authentication required. Please sign in to continue.", "warning");
+      showLoginModal();
+      return;
+    }
+
+    setLoadingState(true, "Scanning gigs...");
+    updateStatus("Navigating to gigs page and extracting data...", "loading");
+    
+    const res = await send(tabId, { type: "NAV_TO_GIGS_AND_SCRAPE" });
+
+    if (res?.status === "OK") {
+      gigs = Array.isArray(res.gigs) ? res.gigs : [];
+      filterEl.value = "";
+      
+      try {
+        updateStatus('Collecting detailed gig info (this may take a while)...', 'loading');
+        setLoadingState(true, 'Scraping gigs...');
+
+        const detailed = await scrapeAllGigDetails(gigs);
+
+        updateStatus('Saving detailed gigs to storage and Supabase...', 'loading');
+        const syncResult = await window.AppState.syncGigs(detailed);
+
+        const debugInfo = res.debug ? ` from ${new URL(res.debug.url).pathname}` : '';
+        const syncInfo = syncResult.synced ? ' (synced to Supabase)' : ' (local storage only)';
+        const successMessage = detailed.length > 0 
+          ? `Successfully scraped and stored ${detailed.length} gig${detailed.length === 1 ? '' : 's'}${debugInfo}${syncInfo}`
+          : "Scraping completed - no gigs found";
+
+        setLoadingState(false);
+        updateStatus(successMessage, detailed.length > 0 ? "success" : "warning");
+
+        const connectionStatus = window.AppState.getConnectionStatus();
+        updateSupabaseStatus(connectionStatus);
+      } catch (syncError) {
+        console.error('Failed to scrape or sync gigs:', syncError);
+        setLoadingState(false);
+        updateStatus('Scraping completed but failed to save all data. Check console for details.', 'warning');
+      }
+      
+      if (res.debug) {
+        console.log("[Fiverr Reader] Success debug info:", res.debug);
+      }
+      if (gigs.length === 0) {
+        console.log("[Fiverr Reader] No gigs found. Please check if you have active gigs in your account.");
+      }
+      
+      applyFilter();
+      return;
+    }
+
+    if (res?.status === "LOGIN_REQUIRED") {
+      setLoadingState(false);
+      updateStatus("Authentication required. Please sign in to continue.", "warning");
+      showLoginModal();
+      return;
+    }
+
+    setLoadingState(false);
+    
+    if (res?.debug) {
+      console.log("[Fiverr Reader] Error debug info:", res.debug);
+    }
+    if (res?.error) {
+      console.log("[Fiverr Reader] Error details:", res.error);
+    }
+    
+    updateStatus("Failed to scan gigs. Please check the console for details.", "error");
+  } catch (e) {
+    console.error("[Fiverr Reader] Unexpected error:", e);
+    setLoadingState(false);
+    updateStatus("An unexpected error occurred. Please try again.", "error");
+  }
+}
+
+// ========== EVENT LISTENERS ==========
+runBtn.addEventListener("click", run);
+
+exportBtn.addEventListener("click", () => {
+  const rows = view.length ? view : gigs;
+  const csv = ["Title,URL"]
+    .concat(rows.map(({ title, url }) =>
+      `"${(title||"").replace(/"/g,'""')}","${(url||"").replace(/"/g,'""')}"`))
+    .join("\n");
+  
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); 
+  a.href = url; 
+  a.download = `fiverr_gigs_${new Date().toISOString().split('T')[0]}.csv`; 
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  updateStatus(`Exported ${rows.length} gig${rows.length === 1 ? '' : 's'} to CSV file.`, "success");
+  
+  const originalText = exportBtn.textContent;
+  exportBtn.textContent = "Exported!";
+  exportBtn.style.background = "var(--success)";
+  
+  setTimeout(() => {
+    exportBtn.textContent = originalText;
+    exportBtn.style.background = "";
+  }, 2000);
+});
+
+copyBtn.addEventListener("click", async () => {
+  const items = view.length ? view : gigs;
+  const lines = items.map(g => g.title).join("\n");
+  
+  try { 
+    await navigator.clipboard.writeText(lines); 
+    updateStatus(`Copied ${items.length} gig title${items.length === 1 ? '' : 's'} to clipboard.`, "success");
+    
+    const originalText = copyBtn.textContent;
+    copyBtn.textContent = "Copied!";
+    copyBtn.style.background = "var(--success)";
+    
+    setTimeout(() => {
+      copyBtn.textContent = originalText;
+      copyBtn.style.background = "";
+    }, 2000);
+  } catch { 
+    updateStatus("Failed to copy to clipboard. Please try again.", "error");
+  }
+});
+
+filterEl.addEventListener("input", applyFilter);
+
+// Supabase config listeners
+saveSupabaseBtn.addEventListener('click', saveSupabaseConfig);
+clearSupabaseBtn.addEventListener('click', clearSupabaseConfig);
+testSupabaseBtn.addEventListener('click', testSupabaseConnection);
+
+// Modal listeners
+openLoginBtn.addEventListener("click", openFiverrLogin);
+
+checkLoginBtn.addEventListener("click", async () => {
+  await checkLoginStatus();
+});
+
+closeModalBtn.addEventListener("click", hideLoginModal);
+
+reloadBtn.addEventListener("click", async () => {
+  reloadExtension();
+  await continueAfterLogin();
+});
+
+// Close modals on outside click
+loginModal.addEventListener("click", (e) => {
+  if (e.target === loginModal) {
+    hideLoginModal();
+  }
+});
+
+successModal.addEventListener("click", (e) => {
+  if (e.target === successModal) {
+    hideSuccessModal();
+  }
+});
+
+// Close modals on Escape
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (loginModal.style.display === "flex") {
+      hideLoginModal();
+    }
+    if (successModal.style.display === "flex") {
+      hideSuccessModal();
+    }
+  }
+});
+
+// Load config on startup
+loadSupabaseConfig();
